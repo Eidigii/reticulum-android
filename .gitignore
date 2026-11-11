@@ -1,6 +1,9 @@
+# Android / Gradle
 *.iml
 .gradle
+.kotlin/
 /local.properties
+local.properties
 /.idea
 .DS_Store
 /build
@@ -8,6 +11,38 @@
 /captures
 .externalNativeBuild
 .cxx
-local.properties
+*.hprof
+
+# Build outputs
 *.apk
 *.aab
+*.apks
+output-metadata.json
+
+# Release signing — never commit keys or their passwords
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.der
+signing.properties
+keystore.properties
+release-signing/
+
+# Secrets / environment
+.env
+.env.*
+google-services.json
+
+# Python (Chaquopy sources in python/)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editors
+.vscode/
+.cursor/
+*.swp
+Thumbs.db

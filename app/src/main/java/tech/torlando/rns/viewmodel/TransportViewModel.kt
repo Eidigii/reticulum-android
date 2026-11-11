@@ -74,6 +74,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     private val _pendingRestart = MutableStateFlow(false)
     val pendingRestart: StateFlow<Boolean> = _pendingRestart.asStateFlow()
 
+    val messenger = MessengerController(viewModelScope) { rnsService }
+
     // Per-interface history buffers for traffic speed charts
     private val historyBuffers = mutableMapOf<String, HistoryBuffer>()
     private val _interfaceHistory = MutableStateFlow<Map<String, List<InterfaceHistoryPoint>>>(emptyMap())
@@ -125,6 +127,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to register callback", e)
             }
+
+            messenger.onServiceConnected()
 
             // If there's a pending start, send it now
             pendingConfigJson?.let { config ->
@@ -315,6 +319,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         _announceTable.value = snapshot.announceQueue
         _discoveredInterfaces.value = snapshot.discoveredInterfaces
         _discoveryEnabled.value = snapshot.discoveryEnabled
+        messenger.applyStatus(snapshot.messenger)
 
         if (snapshot.interfaces.isNotEmpty()) {
             recordHistory(snapshot.interfaces)
@@ -330,6 +335,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         _discoveryEnabled.value = false
         _isConnectedToSharedInstance.value = false
         _transportIdentity.value = null
+        messenger.onServiceStopped()
     }
 
     private fun rebind() {
@@ -376,6 +382,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 put("spreadingFactor", rc.spreadingFactor)
                 put("codingRate", rc.codingRate)
                 put("txPower", rc.txPower)
+                put("networkName", rc.networkName)
+                put("passphrase", rc.passphrase)
+                put("ifacSize", rc.ifacSize)
             })
         }
 
@@ -448,6 +457,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     obj.put("spreading_factor", iface.spreadingFactor)
                     obj.put("coding_rate", iface.codingRate)
                     obj.put("tx_power", iface.txPower)
+                    obj.put("st_alock", iface.stAlock)
+                    obj.put("lt_alock", iface.ltAlock)
+                    obj.put("custom_radio", iface.customRadio)
                 }
             }
             arr.put(obj)

@@ -21,4 +21,7 @@ interface IRnsService {
 
     /** Enable interface discovery. */
     void enableDiscovery();
+
+    /** Invoke a messenger (identity / nodes / LXMF) method. Returns {"result": ...} or {"error": "..."}. */
+    String messengerCall(String method, String argsJson);
 }

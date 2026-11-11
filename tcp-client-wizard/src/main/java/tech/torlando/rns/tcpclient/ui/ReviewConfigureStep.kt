@@ -212,6 +212,56 @@ internal fun ReviewConfigureStep(viewModel: TcpClientWizardViewModel) {
             }
         }
 
+        Spacer(Modifier.height(16.dp))
+
+        // IFAC / network settings
+        Text(
+            "Network (IFAC)",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(8.dp))
+
+        OutlinedTextField(
+            value = state.ifacNetworkName,
+            onValueChange = { viewModel.updateIfacNetworkName(it) },
+            label = { Text("Network Name") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            supportingText = {
+                Text("Shared by all nodes on the same network. Optional.")
+            },
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        OutlinedTextField(
+            value = state.ifacPassphrase,
+            onValueChange = { viewModel.updateIfacPassphrase(it) },
+            label = { Text("Passphrase") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            supportingText = {
+                Text("Leave empty to disable IFAC (unauthenticated network).")
+            },
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        OutlinedTextField(
+            value = state.ifacSize,
+            onValueChange = { viewModel.updateIfacSize(it) },
+            label = { Text("IFAC Size (bits)") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            isError = state.ifacSizeError != null,
+            supportingText = {
+                Text(state.ifacSizeError ?: "Minimum 8 bits, or leave empty for default")
+            },
+        )
+
         Spacer(Modifier.height(100.dp))
     }
 }

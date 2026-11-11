@@ -30,6 +30,11 @@ data class TcpClientWizardState(
     val socksProxyEnabled: Boolean = false,
     val socksProxyHost: String = "127.0.0.1",
     val socksProxyPort: String = "9050",
+    // IFAC (Interface Authentication Code) — empty passphrase means IFAC is not used
+    val ifacNetworkName: String = "",
+    val ifacPassphrase: String = "",
+    val ifacSize: String = "",
+    val ifacSizeError: String? = null,
     // Save state
     val isSaving: Boolean = false,
     val saveError: String? = null,
@@ -141,12 +146,39 @@ class TcpClientWizardViewModel : ViewModel() {
         _state.update { it.copy(socksProxyPort = value) }
     }
 
+    fun updateIfacNetworkName(value: String) {
+        _state.update { it.copy(ifacNetworkName = value) }
+    }
+
+    fun updateIfacPassphrase(value: String) {
+        _state.update { it.copy(ifacPassphrase = value) }
+    }
+
+    fun updateIfacSize(value: String) {
+        val error = ifacSizeErrorOrNull(value)
+        _state.update { it.copy(ifacSize = value, ifacSizeError = error) }
+    }
+
+    /**
+     * Validate an IFAC size (in bits). Empty is allowed (leaves it to the RNS
+     * default). RNS requires a size of at least 8 bits and a multiple of 8
+     * (i.e. a whole number of bytes).
+     */
+    private fun ifacSizeErrorOrNull(value: String): String? {
+        if (value.isBlank()) return null
+        val size = value.toIntOrNull()
+            ?: return "Invalid number"
+        if (size < 8) return "Minimum 8 bits"
+        if (size % 8 != 0) return "Must be a multiple of 8"
+        return null
+    }
+
     fun canProceed(): Boolean {
         val currentState = _state.value
         return when (currentState.currentStep) {
             TcpClientWizardStep.SERVER_SELECTION ->
                 currentState.selectedServer != null || currentState.isCustomMode
-            TcpClientWizardStep.REVIEW_CONFIGURE -> true
+            TcpClientWizardStep.REVIEW_CONFIGURE -> ifacSizeErrorOrNull(currentState.ifacSize) == null
         }
     }
 
@@ -184,6 +216,9 @@ class TcpClientWizardViewModel : ViewModel() {
             socksProxyEnabled = currentState.socksProxyEnabled,
             socksProxyHost = currentState.socksProxyHost.trim().ifEmpty { "127.0.0.1" },
             socksProxyPort = currentState.socksProxyPort.toIntOrNull() ?: 9050,
+            networkName = currentState.ifacNetworkName.trim(),
+            passphrase = currentState.ifacPassphrase,
+            ifacSize = currentState.ifacSize.toIntOrNull() ?: 0,
         )
 
         _state.update {

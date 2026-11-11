@@ -98,6 +98,8 @@ data class RegionLimits(
 data class RNodeWizardState(
     // Wizard navigation
     val currentStep: WizardStep = WizardStep.DEVICE_DISCOVERY,
+    // Editing an existing interface (values pre-filled from its saved config)
+    val isEditing: Boolean = false,
     // Step 1: Device Discovery
     val connectionType: RNodeConnectionType = RNodeConnectionType.BLUETOOTH,
     val isScanning: Boolean = false,
@@ -149,7 +151,7 @@ data class RNodeWizardState(
     val selectedPreset: RNodeRegionalPreset? = null,
     // New: frequency band selection
     val selectedFrequencyRegion: FrequencyRegion? = null,
-    val isCustomMode: Boolean = false,
+    val isCustomMode: Boolean = true,
     // Collapsible section for local presets
     val showPopularPresets: Boolean = false,
     // Step 3: Modem Preset Selection
@@ -176,6 +178,10 @@ data class RNodeWizardState(
     val stAlock: String = "",
     val ltAlock: String = "",
     val interfaceMode: String = "boundary",
+    // IFAC (Interface Authentication Code) — empty passphrase means IFAC is not used
+    val ifacNetworkName: String = "",
+    val ifacPassphrase: String = "",
+    val ifacSize: String = "",
     val showAdvancedSettings: Boolean = false,
     // Validation errors
     val nameError: String? = null,
@@ -186,6 +192,7 @@ data class RNodeWizardState(
     val codingRateError: String? = null,
     val stAlockError: String? = null,
     val ltAlockError: String? = null,
+    val ifacSizeError: String? = null,
     // Regulatory warning
     val showRegulatoryWarning: Boolean = false,
     val regulatoryWarningMessage: String? = null,
@@ -213,6 +220,9 @@ class RNodeWizardViewModel(application: Application) : AndroidViewModel(applicat
         private const val RECONNECT_SCAN_TIMEOUT_MS = 15_000L
         private const val RSSI_UPDATE_INTERVAL_MS = 3000L
         private const val TCP_CONNECTION_TIMEOUT_MS = 5000
+        private const val RADIO_EXPORT_FORMAT = "rnode-radio-settings"
+        private val RADIO_KEYS =
+            listOf("frequency", "bandwidth", "spreading_factor", "coding_rate", "tx_power", "st_alock", "lt_alock")
     }
 
     private val context: Context get() = getApplication<Application>()
@@ -275,6 +285,92 @@ class RNodeWizardViewModel(application: Application) : AndroidViewModel(applicat
     // Track user-modified fields to preserve state during navigation
     private val userModifiedFields = mutableSetOf<String>()
 
+    init {
+        updateRegulatoryWarning()
+    }
+
+    // ========== EDITING ==========
+
+    /**
+     * Pre-fill the wizard from a saved interface. The saved device is pre-selected
+     * so the device step can be confirmed with Next; if the radio was configured
+     * with Custom settings, Next then goes straight to those settings.
+     */
+    @SuppressLint("MissingPermission")
+    fun startEditing(existing: RNodeWizardResult) {
+        if (_state.value.isEditing) return
+
+        val connectionType =
+            when (existing.connectionMode) {
+                "tcp" -> RNodeConnectionType.TCP_WIFI
+                "usb" -> RNodeConnectionType.USB_SERIAL
+                else -> RNodeConnectionType.BLUETOOTH
+            }
+        val btType = if (existing.connectionMode == "ble") BluetoothType.BLE else BluetoothType.CLASSIC
+        val device =
+            if (connectionType == RNodeConnectionType.BLUETOOTH && existing.targetDevice.isNotBlank()) {
+                val bonded =
+                    try {
+                        bluetoothAdapter?.bondedDevices?.firstOrNull { it.name == existing.targetDevice }
+                    } catch (_: SecurityException) {
+                        null
+                    }
+                DiscoveredRNode(
+                    name = existing.targetDevice,
+                    address = bonded?.address ?: existing.targetDevice,
+                    type = btType,
+                    rssi = null,
+                    isPaired = bonded != null,
+                    bluetoothDevice = bonded,
+                )
+            } else {
+                null
+            }
+        val (host, port) =
+            if (connectionType == RNodeConnectionType.TCP_WIFI) {
+                val idx = existing.targetDevice.lastIndexOf(':')
+                if (idx > 0) {
+                    existing.targetDevice.substring(0, idx) to existing.targetDevice.substring(idx + 1)
+                } else {
+                    existing.targetDevice to "7633"
+                }
+            } else {
+                "" to "7633"
+            }
+
+        // Keep the saved values when a region is (re)applied later.
+        userModifiedFields.addAll(listOf("frequency", "txPower", "stAlock", "ltAlock"))
+
+        _state.update {
+            it.copy(
+                isEditing = true,
+                connectionType = connectionType,
+                selectedDevice = device,
+                discoveredDevices = listOfNotNull(device),
+                manualBluetoothType = btType,
+                tcpHost = host,
+                tcpPort = port,
+                isCustomMode = existing.customRadio,
+                selectedFrequencyRegion = null,
+                selectedPreset = null,
+                interfaceName = existing.name,
+                frequency = existing.frequency.toString(),
+                bandwidth = existing.bandwidth.toString(),
+                spreadingFactor = existing.spreadingFactor.toString(),
+                codingRate = existing.codingRate.toString(),
+                txPower = existing.txPower.toString(),
+                stAlock = existing.stAlock,
+                ltAlock = existing.ltAlock,
+                interfaceMode = existing.interfaceMode,
+                ifacNetworkName = existing.networkName,
+                ifacPassphrase = existing.passphrase,
+                ifacSize = if (existing.ifacSize > 0) existing.ifacSize.toString() else "",
+            )
+        }
+        updateRegulatoryWarning()
+        if (connectionType == RNodeConnectionType.USB_SERIAL) scanUsbDevices()
+    }
+
     // ========== NAVIGATION ==========
 
     fun goToStep(step: WizardStep) {
@@ -285,7 +381,13 @@ class RNodeWizardViewModel(application: Application) : AndroidViewModel(applicat
         val currentState = _state.value
         val nextStep =
             when (currentState.currentStep) {
-                WizardStep.DEVICE_DISCOVERY -> WizardStep.REGION_SELECTION
+                WizardStep.DEVICE_DISCOVERY ->
+                    if (currentState.isEditing && currentState.isCustomMode) {
+                        _state.update { it.copy(showAdvancedSettings = true) }
+                        WizardStep.REVIEW_CONFIGURE
+                    } else {
+                        WizardStep.REGION_SELECTION
+                    }
                 WizardStep.REGION_SELECTION -> {
                     if (currentState.isCustomMode) {
                         _state.update { it.copy(showAdvancedSettings = true) }
@@ -2624,6 +2726,115 @@ class RNodeWizardViewModel(application: Application) : AndroidViewModel(applicat
         _state.update { it.copy(interfaceMode = mode) }
     }
 
+    fun updateIfacNetworkName(value: String) {
+        _state.update { it.copy(ifacNetworkName = value) }
+    }
+
+    fun updateIfacPassphrase(value: String) {
+        _state.update { it.copy(ifacPassphrase = value) }
+    }
+
+    fun updateIfacSize(value: String) {
+        val error = ifacSizeErrorOrNull(value)
+        _state.update { it.copy(ifacSize = value, ifacSizeError = error) }
+    }
+
+    /**
+     * Validate an IFAC size (in bits). Empty is allowed (leaves it to the RNS
+     * default). RNS requires a size of at least 8 bits and a multiple of 8
+     * (i.e. a whole number of bytes).
+     */
+    private fun ifacSizeErrorOrNull(value: String): String? {
+        if (value.isBlank()) return null
+        val size = value.toIntOrNull()
+            ?: return "Invalid number"
+        if (size < 8) return "Minimum 8 bits"
+        if (size % 8 != 0) return "Must be a multiple of 8"
+        return null
+    }
+
+    // ========== RADIO SETTINGS EXPORT / IMPORT ==========
+
+    /** Radio parameters only: no device, interface name or IFAC secrets. */
+    fun exportRadioSettingsJson(): String {
+        val s = _state.value
+        val obj =
+            org.json.JSONObject()
+                .put("format", RADIO_EXPORT_FORMAT)
+                .put("version", 1)
+                .put("frequency", s.frequency.toLongOrNull() ?: 0L)
+                .put("bandwidth", s.bandwidth.toLongOrNull() ?: 0L)
+                .put("spreading_factor", s.spreadingFactor.toIntOrNull() ?: 0)
+                .put("coding_rate", s.codingRate.toIntOrNull() ?: 0)
+                .put("tx_power", s.txPower.toIntOrNull() ?: 0)
+        s.stAlock.toDoubleOrNull()?.let { obj.put("st_alock", it) }
+        s.ltAlock.toDoubleOrNull()?.let { obj.put("lt_alock", it) }
+        return obj.toString(2)
+    }
+
+    /**
+     * Apply radio parameters from an export file, or from an rnsd-style config
+     * snippet (`frequency = 867200000`, `spreadingfactor = 8`, ...).
+     * Returns null on success, or an error message.
+     */
+    fun importRadioSettings(text: String): String? {
+        val values = parseRadioSettings(text.trim()) ?: return "Not a radio settings file"
+        if (values.isEmpty()) return "No radio settings found"
+
+        // Imported values are manual settings; keep them when a region is re-applied.
+        _state.update { it.copy(isCustomMode = true, selectedPreset = null, selectedFrequencyRegion = null, showAdvancedSettings = true) }
+        values["frequency"]?.let { updateFrequency(it) }
+        values["bandwidth"]?.let { updateBandwidth(it) }
+        values["spreading_factor"]?.let { updateSpreadingFactor(it) }
+        values["coding_rate"]?.let { updateCodingRate(it) }
+        values["tx_power"]?.let { updateTxPower(it) }
+        values["st_alock"]?.let { updateStAlock(it) }
+        values["lt_alock"]?.let { updateLtAlock(it) }
+        updateRegulatoryWarning()
+        return null
+    }
+
+    private fun parseRadioSettings(text: String): Map<String, String>? {
+        if (text.startsWith("{")) {
+            val obj = runCatching { org.json.JSONObject(text) }.getOrNull() ?: return null
+            if (obj.has("format") && obj.optString("format") != RADIO_EXPORT_FORMAT) return null
+            return RADIO_KEYS.mapNotNull { key ->
+                if (obj.has(key) && !obj.isNull(key)) key to formatNumber(obj.get(key)) else null
+            }.toMap()
+        }
+        val aliases =
+            mapOf(
+                "frequency" to "frequency",
+                "bandwidth" to "bandwidth",
+                "spreadingfactor" to "spreading_factor",
+                "spreading_factor" to "spreading_factor",
+                "codingrate" to "coding_rate",
+                "coding_rate" to "coding_rate",
+                "txpower" to "tx_power",
+                "tx_power" to "tx_power",
+                "airtime_limit_short" to "st_alock",
+                "airtime_limit_long" to "lt_alock",
+                "st_alock" to "st_alock",
+                "lt_alock" to "lt_alock",
+            )
+        return text.lineSequence()
+            .map { it.substringBefore('#').trim() }
+            .mapNotNull { line ->
+                val idx = line.indexOf('=')
+                if (idx <= 0) return@mapNotNull null
+                val key = aliases[line.substring(0, idx).trim().lowercase()] ?: return@mapNotNull null
+                val value = line.substring(idx + 1).trim()
+                if (value.isEmpty()) null else key to value
+            }
+            .toMap()
+    }
+
+    private fun formatNumber(value: Any): String =
+        when (value) {
+            is Double -> if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
+            else -> value.toString()
+        }
+
     fun toggleAdvancedSettings() {
         _state.update { it.copy(showAdvancedSettings = !it.showAdvancedSettings) }
     }
@@ -2658,6 +2869,9 @@ class RNodeWizardViewModel(application: Application) : AndroidViewModel(applicat
                 region = state.selectedFrequencyRegion,
             )
 
+        // IFAC size is optional (empty = RNS default) but must be valid when provided.
+        val ifacSizeError = ifacSizeErrorOrNull(state.ifacSize)
+
         _state.update {
             it.copy(
                 nameError = result.nameError,
@@ -2668,10 +2882,11 @@ class RNodeWizardViewModel(application: Application) : AndroidViewModel(applicat
                 txPowerError = result.txPowerError,
                 stAlockError = result.stAlockError,
                 ltAlockError = result.ltAlockError,
+                ifacSizeError = ifacSizeError,
             )
         }
 
-        return result.isValid
+        return result.isValid && ifacSizeError == null
     }
 
     @Suppress("CyclomaticComplexMethod", "LongMethod")
@@ -2734,6 +2949,10 @@ class RNodeWizardViewModel(application: Application) : AndroidViewModel(applicat
                         interfaceMode = state.interfaceMode,
                         stAlock = state.stAlock,
                         ltAlock = state.ltAlock,
+                        networkName = state.ifacNetworkName.trim(),
+                        passphrase = state.ifacPassphrase,
+                        ifacSize = state.ifacSize.toIntOrNull() ?: 0,
+                        customRadio = state.isCustomMode,
                     )
 
                 _state.update {

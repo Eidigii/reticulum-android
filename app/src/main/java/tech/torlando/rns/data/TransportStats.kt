@@ -12,6 +12,8 @@ data class InterfaceStats(
     val clients: Int = 0,
     val type: String = "",
     val parentInterfaceName: String? = null,
+    /** JSON from RNodeInterface.get_diagnostics(), null for non-radio interfaces. */
+    val radioDiagnostics: String? = null,
 ) {
     val status: InterfaceStatus
         get() = when {

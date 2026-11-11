@@ -1,6 +1,14 @@
 package tech.torlando.rns.rnode.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +26,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.SignalCellularAlt
@@ -27,7 +37,10 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
@@ -49,6 +62,96 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import tech.torlando.rns.rnode.data.FrequencySlotCalculator
 import tech.torlando.rns.rnode.viewmodel.RNodeWizardViewModel
+
+/** Export/import of the radio parameters only (file or clipboard). */
+@Composable
+private fun RadioSettingsTransferButtons(viewModel: RNodeWizardViewModel) {
+    val context = LocalContext.current
+    var exportMenu by remember { mutableStateOf(false) }
+    var importMenu by remember { mutableStateOf(false) }
+
+    fun toast(msg: String) = Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+
+    fun applyImport(text: String?) {
+        if (text.isNullOrBlank()) {
+            toast("Nothing to import")
+            return
+        }
+        toast(viewModel.importRadioSettings(text) ?: "Radio settings imported")
+    }
+
+    val saveLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            runCatching {
+                context.contentResolver.openOutputStream(uri, "wt")?.use {
+                    it.write(viewModel.exportRadioSettingsJson().toByteArray(Charsets.UTF_8))
+                }
+            }.onSuccess { toast("Radio settings exported") }
+                .onFailure { toast("Export failed: ${it.message}") }
+        }
+    val openLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            val text =
+                runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { s ->
+                        s.readBytes().take(64 * 1024).toByteArray().toString(Charsets.UTF_8)
+                    }
+                }.getOrNull()
+            applyImport(text)
+        }
+
+    Box {
+        TextButton(onClick = { exportMenu = true }) {
+            Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(4.dp))
+            Text("Export")
+        }
+        DropdownMenu(expanded = exportMenu, onDismissRequest = { exportMenu = false }) {
+            DropdownMenuItem(
+                text = { Text("Save to file") },
+                onClick = {
+                    exportMenu = false
+                    saveLauncher.launch("rnode-radio-settings.json")
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Copy to clipboard") },
+                onClick = {
+                    exportMenu = false
+                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    cm.setPrimaryClip(ClipData.newPlainText("RNode radio settings", viewModel.exportRadioSettingsJson()))
+                    toast("Radio settings copied")
+                },
+            )
+        }
+    }
+    Box {
+        TextButton(onClick = { importMenu = true }) {
+            Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(4.dp))
+            Text("Import")
+        }
+        DropdownMenu(expanded = importMenu, onDismissRequest = { importMenu = false }) {
+            DropdownMenuItem(
+                text = { Text("Open file") },
+                onClick = {
+                    importMenu = false
+                    openLauncher.launch(arrayOf("application/json", "text/*", "application/octet-stream"))
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Paste from clipboard") },
+                onClick = {
+                    importMenu = false
+                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    applyImport(cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString())
+                },
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -339,11 +442,15 @@ fun ReviewConfigStep(viewModel: RNodeWizardViewModel) {
                 Spacer(Modifier.height(16.dp))
 
                 // Radio settings header
-                Text(
-                    "Radio Settings",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Radio Settings",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    RadioSettingsTransferButtons(viewModel)
+                }
                 Spacer(Modifier.height(8.dp))
 
                 // Frequency and Bandwidth row
@@ -498,6 +605,56 @@ fun ReviewConfigStep(viewModel: RNodeWizardViewModel) {
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         },
+                )
+
+                Spacer(Modifier.height(16.dp))
+
+                // IFAC / network settings
+                Text(
+                    "Network (IFAC)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = state.ifacNetworkName,
+                    onValueChange = { viewModel.updateIfacNetworkName(it) },
+                    label = { Text("Network Name") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    supportingText = {
+                        Text("Shared by all nodes on the same network. Optional.")
+                    },
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = state.ifacPassphrase,
+                    onValueChange = { viewModel.updateIfacPassphrase(it) },
+                    label = { Text("Passphrase") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    supportingText = {
+                        Text("Leave empty to disable IFAC (unauthenticated network).")
+                    },
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = state.ifacSize,
+                    onValueChange = { viewModel.updateIfacSize(it) },
+                    label = { Text("IFAC Size (bits)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    isError = state.ifacSizeError != null,
+                    supportingText = {
+                        Text(state.ifacSizeError ?: "Minimum 8 bits, or leave empty for default")
+                    },
                 )
 
                 Spacer(Modifier.height(16.dp))

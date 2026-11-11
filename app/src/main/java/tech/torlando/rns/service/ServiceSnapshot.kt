@@ -5,6 +5,7 @@ import org.json.JSONObject
 import tech.torlando.rns.data.AnnounceEntry
 import tech.torlando.rns.data.DiscoveredInterface
 import tech.torlando.rns.data.InterfaceStats
+import tech.torlando.rns.data.MessengerStatus
 import tech.torlando.rns.data.PathEntry
 
 data class ServiceSnapshot(
@@ -17,10 +18,12 @@ data class ServiceSnapshot(
     val announceQueue: List<AnnounceEntry> = emptyList(),
     val discoveredInterfaces: List<DiscoveredInterface> = emptyList(),
     val discoveryEnabled: Boolean = false,
+    val messenger: MessengerStatus? = null,
 ) {
     fun toJson(): String {
         val obj = JSONObject()
         obj.put("state", state)
+        obj.put("messenger", messenger?.toJson() ?: JSONObject.NULL)
         obj.put("error", error ?: JSONObject.NULL)
         obj.put("identity", identity ?: JSONObject.NULL)
         obj.put("connectedToSharedInstance", connectedToSharedInstance)
@@ -39,6 +42,7 @@ data class ServiceSnapshot(
                 put("detached", i.detached)
                 put("type", i.type)
                 put("parentInterfaceName", i.parentInterfaceName ?: JSONObject.NULL)
+                put("radioDiagnostics", i.radioDiagnostics ?: JSONObject.NULL)
             })
         }
         obj.put("interfaces", ifArr)
@@ -107,6 +111,7 @@ data class ServiceSnapshot(
                 pathTable = parsePathTable(obj.optJSONArray("pathTable")),
                 announceQueue = parseAnnounceQueue(obj.optJSONArray("announceQueue")),
                 discoveredInterfaces = parseDiscoveredInterfaces(obj.optJSONArray("discoveredInterfaces")),
+                messenger = MessengerStatus.fromJson(obj.optJSONObject("messenger")),
             )
         }
 
@@ -128,6 +133,7 @@ data class ServiceSnapshot(
                     detached = o.optBoolean("detached", false),
                     type = o.optString("type", ""),
                     parentInterfaceName = o.stringOrNull("parentInterfaceName"),
+                    radioDiagnostics = o.stringOrNull("radioDiagnostics"),
                 )
             }
         }

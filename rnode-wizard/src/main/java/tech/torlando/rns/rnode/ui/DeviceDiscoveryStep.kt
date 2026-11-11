@@ -481,6 +481,30 @@ private fun BluetoothDeviceDiscovery(
             Spacer(Modifier.height(16.dp))
         }
 
+        if (state.isEditing) {
+            state.selectedDevice?.let { current ->
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Currently configured: ${current.name}",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "Tap Next to keep this device, or pick another one below.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+            }
+        }
+
         // Association error
         state.associationError?.let { error ->
             Card(

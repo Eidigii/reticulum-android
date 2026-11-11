@@ -35,3 +35,6 @@ splashscreen = { module = "androidx.core:core-splashscreen", version = "1.2.0" }
 
 # DataStore
 datastore = { module = "androidx.datastore:datastore-preferences", version.ref = "dataStore" }
+
+# QR codes
+zxing-core = { module = "com.google.zxing:core", version = "3.5.3" }

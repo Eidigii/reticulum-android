@@ -58,7 +58,7 @@ fun RNodeWizardScreen(
                 title = {
                     Text(
                         when (state.currentStep) {
-                            WizardStep.DEVICE_DISCOVERY -> "Select RNode Device"
+                            WizardStep.DEVICE_DISCOVERY -> if (state.isEditing) "Edit RNode" else "Select RNode Device"
                             WizardStep.REGION_SELECTION -> "Choose Region"
                             WizardStep.MODEM_PRESET -> "Select Modem Preset"
                             WizardStep.FREQUENCY_SLOT -> "Select Frequency Slot"

@@ -76,7 +76,8 @@ private val StatusOffline = Color(0xFF9E9E9E)
 fun InterfacesScreen(
     viewModel: TransportViewModel,
     onNavigateToDiscovery: () -> Unit = {},
-    onNavigateToRnodeWizard: () -> Unit = {},
+    /** Opens the RNode wizard; a non-null index edits that configured interface. */
+    onNavigateToRnodeWizard: (editIndex: Int?) -> Unit = {},
     onNavigateToTcpClientWizard: () -> Unit = {},
     onNavigateToInterfaceStats: (String) -> Unit = {},
 ) {
@@ -325,7 +326,10 @@ fun InterfacesScreen(
                                         is InterfaceConfig.AutoInterface -> showAutoDialog = true
                                         is InterfaceConfig.UdpInterface -> showUdpDialog = true
                                         is InterfaceConfig.I2PInterface -> showI2pDialog = true
-                                        is InterfaceConfig.RNodeInterface -> onNavigateToRnodeWizard()
+                                        is InterfaceConfig.RNodeInterface -> {
+                                            editingIndex = null
+                                            onNavigateToRnodeWizard(index)
+                                        }
                                     }
                                 },
                                 onDelete = { pendingDeleteIndex = index },
@@ -368,7 +372,7 @@ fun InterfacesScreen(
                     "auto" -> showAutoDialog = true
                     "udp" -> showUdpDialog = true
                     "i2p" -> showI2pDialog = true
-                    "rnode" -> onNavigateToRnodeWizard()
+                    "rnode" -> onNavigateToRnodeWizard(null)
                 }
             },
         )

@@ -2,6 +2,7 @@ package tech.torlando.rns.binding
 
 import android.content.Context
 import android.util.Log
+import com.chaquo.python.Kwarg
 import com.chaquo.python.PyObject
 import com.chaquo.python.Python
 import tech.torlando.rns.bridges.rnode.KotlinRNodeBridge
@@ -76,6 +77,11 @@ class ReticulumBinding(private val storagePath: String, private val context: Con
                         config.spreadingFactor,
                         config.codingRate,
                         config.txPower,
+                        Kwarg("network_name", config.networkName),
+                        Kwarg("passphrase", config.passphrase),
+                        Kwarg("ifac_size", config.ifacSize),
+                        Kwarg("st_alock", config.stAlock.toDoubleOrNull()),
+                        Kwarg("lt_alock", config.ltAlock.toDoubleOrNull()),
                     )
                     Log.i(TAG, "Created RNode interface: ${config.name}")
                 } catch (e: Exception) {
@@ -167,6 +173,13 @@ class ReticulumBinding(private val storagePath: String, private val context: Con
                     detached = try { iface.get("detached")?.toBoolean() ?: false } catch (_: Exception) { false },
                     type = typeStr,
                     parentInterfaceName = parentName,
+                    radioDiagnostics = try {
+                        if (iface.containsKey("get_diagnostics")) {
+                            py.getModule("json").callAttr("dumps", iface.callAttr("get_diagnostics")).toString()
+                        } else {
+                            null
+                        }
+                    } catch (_: Exception) { null },
                 )
             }
         } catch (e: Exception) {
@@ -177,41 +190,19 @@ class ReticulumBinding(private val storagePath: String, private val context: Con
 
     fun getPathTable(): List<tech.torlando.rns.data.PathEntry> {
         return try {
-            val rns = py.getModule("RNS")
-            val transport = rns.get("Transport") ?: return emptyList()
-            val destinationTable = transport.get("path_table")
-            if (destinationTable == null || destinationTable.callAttr("__len__").toInt() == 0) {
-                return emptyList()
+            val arr = org.json.JSONArray(
+                py.getModule("json").callAttr("dumps", py.getModule("network_monitor").callAttr("get_path_table")).toString(),
+            )
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                tech.torlando.rns.data.PathEntry(
+                    hash = o.getString("hash"),
+                    via = o.optString("via", ""),
+                    hops = o.optInt("hops", 0),
+                    expires = o.optDouble("expires", 0.0).toLong(),
+                    interfaceName = o.optString("interface", "Unknown"),
+                )
             }
-
-            val entries = mutableListOf<tech.torlando.rns.data.PathEntry>()
-            val builtins = py.getBuiltins()
-            val items = builtins.callAttr("list", destinationTable.callAttr("items")).asList()
-            for (item in items) {
-                try {
-                    val itemList = item.asList()
-                    val hashBytes = itemList[0]
-                    val entry = itemList[1].asList()
-                    val timestamp = entry[0].toDouble()
-                    val via = entry[1]?.toString() ?: ""
-                    val hops = entry[2]?.toInt() ?: 0
-                    val expires = entry[3]?.toDouble()?.toLong() ?: 0L
-                    val ifaceName = entry[5]?.callAttr("__str__")?.toString() ?: "Unknown"
-
-                    entries.add(
-                        tech.torlando.rns.data.PathEntry(
-                            hash = hashBytes.callAttr("hex").toString(),
-                            via = via,
-                            hops = hops,
-                            expires = expires,
-                            interfaceName = ifaceName,
-                        ),
-                    )
-                } catch (e: Exception) {
-                    Log.w(TAG, "Error parsing path entry", e)
-                }
-            }
-            entries
         } catch (e: Exception) {
             Log.e(TAG, "Error getting path table", e)
             emptyList()
@@ -220,38 +211,18 @@ class ReticulumBinding(private val storagePath: String, private val context: Con
 
     fun getAnnounceTable(): List<tech.torlando.rns.data.AnnounceEntry> {
         return try {
-            val rns = py.getModule("RNS")
-            val transport = rns.get("Transport") ?: return emptyList()
-            val announceTable = transport.get("announce_table")
-            if (announceTable == null || announceTable.callAttr("__len__").toInt() == 0) {
-                return emptyList()
+            val arr = org.json.JSONArray(
+                py.getModule("json").callAttr("dumps", py.getModule("network_monitor").callAttr("get_announce_queue")).toString(),
+            )
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                tech.torlando.rns.data.AnnounceEntry(
+                    hash = o.getString("hash"),
+                    hops = o.optInt("hops", 0),
+                    timestamp = o.optDouble("timestamp", 0.0),
+                    interfaceName = o.optString("interface", "Unknown"),
+                )
             }
-
-            val entries = mutableListOf<tech.torlando.rns.data.AnnounceEntry>()
-            val builtins = py.getBuiltins()
-            val items = builtins.callAttr("list", announceTable.callAttr("items")).asList()
-            for (item in items) {
-                try {
-                    val itemList = item.asList()
-                    val hashBytes = itemList[0]
-                    val entry = itemList[1].asList()
-                    val timestamp = entry[0].toDouble()
-                    val hops = entry[4]?.toInt() ?: 0
-                    val ifaceName = entry[6]?.callAttr("__str__")?.toString() ?: "Unknown"
-
-                    entries.add(
-                        tech.torlando.rns.data.AnnounceEntry(
-                            hash = hashBytes.callAttr("hex").toString(),
-                            hops = hops,
-                            timestamp = timestamp,
-                            interfaceName = ifaceName,
-                        ),
-                    )
-                } catch (e: Exception) {
-                    Log.w(TAG, "Error parsing announce entry", e)
-                }
-            }
-            entries
         } catch (e: Exception) {
             Log.e(TAG, "Error getting announce table", e)
             emptyList()

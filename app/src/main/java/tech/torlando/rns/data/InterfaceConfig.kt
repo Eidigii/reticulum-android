@@ -91,6 +91,10 @@ sealed class InterfaceConfig {
                             spreadingFactor = obj.optInt("spreading_factor", 0),
                             codingRate = obj.optInt("coding_rate", 0),
                             txPower = obj.optInt("tx_power", 0),
+                            stAlock = obj.optString("st_alock", ""),
+                            ltAlock = obj.optString("lt_alock", ""),
+                            // Saved before the flag existed: edit with the exact saved values.
+                            customRadio = obj.optBoolean("custom_radio", true),
                         )
                         else -> null
                     }
@@ -176,5 +180,9 @@ sealed class InterfaceConfig {
         val spreadingFactor: Int = 0,
         val codingRate: Int = 0,
         val txPower: Int = 0,
+        val stAlock: String = "",
+        val ltAlock: String = "",
+        /** Radio parameters were entered manually ("Custom") rather than from a region/preset. */
+        val customRadio: Boolean = false,
     ) : InterfaceConfig()
 }

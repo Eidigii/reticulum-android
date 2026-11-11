@@ -9,10 +9,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Circle
+import androidx.compose.material.icons.filled.Monitor
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
@@ -21,6 +24,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -33,11 +37,17 @@ import tech.torlando.rns.service.ServiceState
 import tech.torlando.rns.viewmodel.TransportViewModel
 
 @Composable
-fun HomeScreen(viewModel: TransportViewModel) {
+fun HomeScreen(
+    viewModel: TransportViewModel,
+    onOpenIdentity: () -> Unit,
+    onOpenMonitor: () -> Unit,
+) {
     val serviceState by viewModel.serviceState.collectAsState()
     val transportIdentity by viewModel.transportIdentity.collectAsState()
     val interfaceStats by viewModel.interfaceStats.collectAsState()
     val pathTable by viewModel.pathTable.collectAsState()
+    val localIdentity by viewModel.messenger.identity.collectAsState()
+    val nodes by viewModel.messenger.nodes.collectAsState()
 
     Column(
         modifier = Modifier
@@ -97,6 +107,43 @@ fun HomeScreen(viewModel: TransportViewModel) {
                     enabled = false,
                 ) {
                     Text("Stopping...")
+                }
+            }
+        }
+
+        // LXMF identity (messaging address)
+        localIdentity?.let { id ->
+            Spacer(Modifier.height(16.dp))
+            Card(
+                onClick = onOpenIdentity,
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                ),
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    PeerAvatar(id.displayName.ifBlank { "?" }, id.destinationHash)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            id.displayName.ifBlank { "My identity" },
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            text = id.destinationHash,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        )
+                        Text(
+                            text = if (id.running) "Last announce: ${formatAgo(id.lastAnnounce)}" else "Tap to manage identity",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                        )
+                    }
+                    Icon(Icons.Default.Badge, contentDescription = null)
                 }
             }
         }
@@ -164,6 +211,32 @@ fun HomeScreen(viewModel: TransportViewModel) {
                     modifier = Modifier.weight(1f),
                 )
             }
+
+            Spacer(Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                StatCard(
+                    title = "Nodes",
+                    value = nodes.size.toString(),
+                    subtitle = "${nodes.count { it.reachable }} reachable",
+                    modifier = Modifier.weight(1f),
+                )
+                StatCard(
+                    title = "Peers",
+                    value = nodes.count { it.type == "peer" }.toString(),
+                    subtitle = "LXMF",
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        OutlinedButton(onClick = onOpenMonitor, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.Monitor, contentDescription = null)
+            Text("  Network monitor")
         }
     }
 }

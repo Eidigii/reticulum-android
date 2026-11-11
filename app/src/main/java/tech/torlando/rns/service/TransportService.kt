@@ -14,12 +14,14 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.chaquo.python.Python
 import org.json.JSONArray
 import org.json.JSONObject
 import tech.torlando.rns.MainActivity
 import tech.torlando.rns.R
 import tech.torlando.rns.binding.ReticulumBinding
 import tech.torlando.rns.data.InterfaceConfig
+import tech.torlando.rns.data.MessengerStatus
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
@@ -30,12 +32,14 @@ class TransportService : Service() {
     companion object {
         private const val TAG = "TransportService"
         private const val CHANNEL_ID = "reticulum_transport"
+        private const val MESSAGES_CHANNEL_ID = "reticulum_messages"
         private const val NOTIFICATION_ID = 1
         private const val STATS_POLL_INTERVAL_MS = 2000L
         private const val SAVED_CONFIG_FILE = "saved_config.json"
 
         const val ACTION_START = "tech.torlando.rns.START"
         const val ACTION_STOP = "tech.torlando.rns.STOP"
+        const val EXTRA_OPEN_CONVERSATION = "tech.torlando.rns.OPEN_CONVERSATION"
     }
 
     private var binding: ReticulumBinding? = null
@@ -81,6 +85,22 @@ class TransportService : Service() {
 
         override fun enableDiscovery() {
             executor.execute { doEnableDiscovery() }
+        }
+
+        override fun messengerCall(method: String?, argsJson: String?): String {
+            if (method == null) return """{"error":"No method"}"""
+            return callMessenger(method, argsJson ?: "{}")
+        }
+    }
+
+    private fun callMessenger(method: String, argsJson: String): String {
+        return try {
+            Python.getInstance().getModule("messenger")
+                .callAttr("call", filesDir.absolutePath, method, argsJson)
+                .toString()
+        } catch (e: Exception) {
+            Log.e(TAG, "Messenger call $method failed", e)
+            JSONObject().put("error", e.message ?: "Messenger error").toString()
         }
     }
 
@@ -165,6 +185,13 @@ class TransportService : Service() {
             b.initialize(configIni, rnodeConfigs)
             binding = b
 
+            try {
+                Python.getInstance().getModule("messenger").callAttr("start", filesDir.absolutePath)
+                Log.i(TAG, "Messenger started")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start messenger", e)
+            }
+
             currentState = "running"
             currentError = null
             updateNotification("Running")
@@ -244,8 +271,52 @@ class TransportService : Service() {
                 emptyList()
             },
             discoveryEnabled = discoveryEnabled,
+            messenger = pollMessenger(),
         )
         updateAndBroadcast(snapshot)
+    }
+
+    private fun pollMessenger(): MessengerStatus? {
+        val status = JSONObject(callMessenger("get_status", "{}")).optJSONObject("result")
+        val incoming = JSONObject(callMessenger("take_new_incoming", "{}")).optJSONArray("result")
+        if (incoming != null) {
+            for (i in 0 until incoming.length()) {
+                val m = incoming.getJSONObject(i)
+                showMessageNotification(
+                    peer = m.getString("peer"),
+                    name = m.optString("name").takeIf { it.isNotBlank() && it != "null" },
+                    content = m.optString("content", ""),
+                )
+            }
+        }
+        return MessengerStatus.fromJson(status)
+    }
+
+    private fun showMessageNotification(peer: String, name: String?, content: String) {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            putExtra(EXTRA_OPEN_CONVERSATION, peer)
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            peer.hashCode(),
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val notification = NotificationCompat.Builder(this, MESSAGES_CHANNEL_ID)
+            .setContentTitle(name ?: peer.take(16))
+            .setContentText(content)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(content))
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .build()
+        try {
+            getSystemService(NotificationManager::class.java).notify(peer.hashCode(), notification)
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Notification permission missing", e)
+        }
     }
 
     private fun updateAndBroadcast(snapshot: ServiceSnapshot) {
@@ -305,6 +376,9 @@ class TransportService : Service() {
                     spreadingFactor = o.optInt("spreadingFactor", 0),
                     codingRate = o.optInt("codingRate", 0),
                     txPower = o.optInt("txPower", 0),
+                    networkName = o.optString("networkName", ""),
+                    passphrase = o.optString("passphrase", ""),
+                    ifacSize = o.optInt("ifacSize", 0),
                 )
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to parse RNode config", e)
@@ -324,8 +398,16 @@ class TransportService : Service() {
             description = "Reticulum network stack service"
             setShowBadge(false)
         }
+        val messagesChannel = NotificationChannel(
+            MESSAGES_CHANNEL_ID,
+            "Messages",
+            NotificationManager.IMPORTANCE_HIGH,
+        ).apply {
+            description = "Incoming LXMF messages"
+        }
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(channel)
+        nm.createNotificationChannel(messagesChannel)
     }
 
     private fun createNotification(status: String): Notification {

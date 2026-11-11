@@ -9,10 +9,11 @@ The KISS protocol and command structure is based on the Reticulum Network Stack
 RNodeInterface implementation.
 """
 
-import collections
+import math
 import threading
 import time
 import RNS
+from RNS.Interfaces.Interface import Interface
 
 # Global RNode bridge instance (set from Kotlin via rns_helper.py)
 _rnode_bridge_instance = None
@@ -156,7 +157,7 @@ class KISS:
         return bytes(result)
 
 
-class RNodeInterface:
+class RNodeInterface(Interface):
     """
     RNode interface using KotlinRNodeBridge for Bluetooth communication.
 
@@ -167,6 +168,10 @@ class RNodeInterface:
     # Validation limits
     FREQ_MIN = 137000000
     FREQ_MAX = 3000000000
+
+    # Default IFAC size (in bytes) when the user does not specify one.
+    # Matches the reference RNS RNodeInterface (8 bytes = 64 bits).
+    DEFAULT_IFAC_SIZE = 8
 
     # Required firmware version
     REQUIRED_FW_VER_MAJ = 1
@@ -199,6 +204,10 @@ class RNodeInterface:
                 - st_alock: Short-term airtime limit (optional)
                 - lt_alock: Long-term airtime limit (optional)
         """
+        # RNS Transport calls many base Interface methods (announce queueing,
+        # held announces, path request accounting, egress control, get_hash).
+        super().__init__()
+
         self.owner = owner
         self.name = name
         self.online = False
@@ -210,20 +219,35 @@ class RNodeInterface:
         # Standard RNS interface attributes
         self.IN = True
         self.OUT = True
-        self.bitrate = 10000  # Approximate LoRa bitrate (varies with SF/BW)
-        self.rxb = 0  # Received bytes counter
-        self.txb = 0  # Transmitted bytes counter
-        self.held_announces = []  # Held announces for processing
         self.announce_allowed_at = 0  # Timestamp when next announce is allowed
         self.announce_cap = RNS.Reticulum.ANNOUNCE_CAP  # Announce rate cap
-        self.oa_freq_deque = collections.deque(maxlen=16)  # Outgoing announce frequency tracking
-        self.ia_freq_deque = collections.deque(maxlen=16)  # Incoming announce frequency tracking
+        self.announce_queue = []
         self.announce_rate_target = None  # Target announce rate (None = no specific target)
         self.announce_rate_grace = 0  # Grace period for announce rate limiting
         self.announce_rate_penalty = 0  # Penalty for exceeding announce rate
-        self.ifac_size = 16  # Interface authentication code size
-        self.ifac_netname = None  # Network name for IFAC
-        self.ifac_netkey = None  # Network key for IFAC
+        # IFAC (Interface Authentication Code) support.
+        # This class is a standalone interface added to RNS.Transport, so it
+        # bypasses the reference RNS auto-derivation in
+        # Reticulum._initialize_interfaces(); we replicate it here so every
+        # node on the same network derives an identical IFAC key.
+        #
+        # ifac_size is specified in the config in BITS; the interface stores it
+        # in BYTES (the reference RNS divides by 8). An empty/invalid size
+        # falls back to the class default. IFAC only becomes active when a
+        # network name and/or passphrase are configured.
+        ifac_size_bits = int(config.get("ifac_size") or 0)
+        if ifac_size_bits >= RNS.Reticulum.IFAC_MIN_SIZE * 8:
+            self.ifac_size = ifac_size_bits // 8
+        else:
+            self.ifac_size = self.DEFAULT_IFAC_SIZE
+
+        # Stripped like the reference config parser, so a trailing space from
+        # the soft keyboard does not silently produce a different IFAC key.
+        self.ifac_netname = str(config.get("network_name") or "").strip() or None
+        self.ifac_netkey = str(config.get("passphrase") or "").strip() or None
+
+        if self.ifac_netname != None or self.ifac_netkey != None:
+            self._derive_ifac_credentials()
         self.AUTOCONFIGURE_MTU = False  # Whether to autoconfigure MTU
         self.FIXED_MTU = True  # Whether MTU is fixed (not dynamically adjusted)
         # IMPORTANT: HW_MTU must NOT be None!
@@ -267,6 +291,7 @@ class RNodeInterface:
         self.cr = config.get("coding_rate", 5)
         self.st_alock = config.get("st_alock")
         self.lt_alock = config.get("lt_alock")
+        self._update_bitrate()
 
         # State tracking
         self.state = KISS.RADIO_STATE_OFF
@@ -284,6 +309,14 @@ class RNodeInterface:
         self.r_state = None
         self.r_stat_rssi = None
         self.r_stat_snr = None
+        self.rx_frames = 0
+        self.rx_ifac_ok = 0
+        self.rx_ifac_missing = 0
+        self.rx_ifac_unexpected = 0
+        self.rx_ifac_invalid = 0
+        self.last_rx_at = None
+        self.tx_frames = 0
+        self.tx_errors = 0
 
         # External framebuffer (display) settings
         self.enable_framebuffer = config.get("enable_framebuffer", True)
@@ -309,6 +342,30 @@ class RNodeInterface:
         self._validate_config()
 
         RNS.log(f"RNodeInterface '{name}' initialized", RNS.LOG_DEBUG)
+
+    def _derive_ifac_credentials(self):
+        """Derive the IFAC key, identity, and signature.
+
+        Mirrors RNS.Reticulum._initialize_interfaces() so that any two
+        interfaces configured with the same network name / passphrase
+        produce byte-identical IFAC credentials. The RNS Transport uses
+        ifac_size / ifac_key / ifac_identity (not the raw name/key) when
+        masking packets, so this derivation must match the reference.
+        """
+        ifac_origin = b""
+
+        if self.ifac_netname != None:
+            ifac_origin += RNS.Identity.full_hash(self.ifac_netname.encode("utf-8"))
+
+        if self.ifac_netkey != None:
+            ifac_origin += RNS.Identity.full_hash(self.ifac_netkey.encode("utf-8"))
+
+        ifac_origin_hash = RNS.Identity.full_hash(ifac_origin)
+        self.ifac_key = RNS.Cryptography.hkdf(length=64, derive_from=ifac_origin_hash,
+                                              salt=RNS.Reticulum.IFAC_SALT, context=None)
+
+        self.ifac_identity = RNS.Identity.from_bytes(self.ifac_key)
+        self.ifac_signature = self.ifac_identity.sign(RNS.Identity.full_hash(self.ifac_key))
 
     def _get_kotlin_bridge(self):
         """Get the Kotlin RNode bridge from module globals."""
@@ -944,11 +1001,75 @@ class RNodeInterface:
             RNS.log(f"Firmware version {self.maj_version}.{self.min_version} is below required "
                     f"{self.REQUIRED_FW_VER_MAJ}.{self.REQUIRED_FW_VER_MIN}", RNS.LOG_WARNING)
 
+    def _classify_ifac(self, raw):
+        """Mirror Transport.inbound's IFAC check so silent drops become visible.
+
+        Returns "ok", "missing" (we expect IFAC, peer sent none),
+        "unexpected" (peer uses IFAC, we don't) or "invalid" (wrong key/size).
+        """
+        if len(raw) <= 2:
+            return "invalid"
+        flagged = raw[0] & 0x80 == 0x80
+        if getattr(self, "ifac_identity", None) is None:
+            return "unexpected" if flagged else "ok"
+        if not flagged:
+            return "missing"
+        size = self.ifac_size
+        if len(raw) <= 2 + size:
+            return "invalid"
+        ifac = raw[2:2 + size]
+        mask = RNS.Cryptography.hkdf(length=len(raw), derive_from=ifac, salt=self.ifac_key, context=None)
+        unmasked = bytes(b ^ mask[i] if (i <= 1 or i > size + 1) else b for i, b in enumerate(raw))
+        new_raw = bytes([unmasked[0] & 0x7f, unmasked[1]]) + unmasked[2 + size:]
+        return "ok" if self.ifac_identity.sign(new_raw)[-size:] == ifac else "invalid"
+
+    def get_diagnostics(self):
+        """Radio-level receive counters for the UI."""
+        with self._read_lock:
+            rssi, snr = self.r_stat_rssi, self.r_stat_snr
+        return {
+            "rx_frames": self.rx_frames,
+            "tx_frames": self.tx_frames,
+            "tx_errors": self.tx_errors,
+            "rx_ifac_ok": self.rx_ifac_ok,
+            "rx_ifac_missing": self.rx_ifac_missing,
+            "rx_ifac_unexpected": self.rx_ifac_unexpected,
+            "rx_ifac_invalid": self.rx_ifac_invalid,
+            "last_rx_at": self.last_rx_at,
+            "last_rssi": rssi,
+            "last_snr": snr,
+            "ifac_enabled": getattr(self, "ifac_identity", None) is not None,
+            "ifac_size": self.ifac_size,
+            "frequency": self.r_frequency or self.frequency,
+            "bandwidth": self.r_bandwidth or self.bandwidth,
+            "spreading_factor": self.r_sf or self.sf,
+            "coding_rate": self.r_cr or self.cr,
+            "tx_power": self.r_txpower if self.r_txpower is not None else self.txpower,
+            "bitrate": self.bitrate,
+        }
+
     def _process_incoming(self, data):
         """Process incoming data frame from RNode."""
         if len(data) > 0 and self.online:
             # Update receive counter
             self.rxb += len(data)
+            self.rx_frames += 1
+            self.last_rx_at = time.time()
+            try:
+                verdict = self._classify_ifac(data)
+            except Exception:
+                verdict = "invalid"
+            if verdict == "ok":
+                self.rx_ifac_ok += 1
+            elif verdict == "missing":
+                self.rx_ifac_missing += 1
+                RNS.log(f"[{self.name}] Dropped LoRa frame without IFAC: this interface has a network name/passphrase but the sender does not", RNS.LOG_WARNING)
+            elif verdict == "unexpected":
+                self.rx_ifac_unexpected += 1
+                RNS.log(f"[{self.name}] Dropped LoRa frame with IFAC: the sender uses a network name/passphrase but this interface has none", RNS.LOG_WARNING)
+            else:
+                self.rx_ifac_invalid += 1
+                RNS.log(f"[{self.name}] Dropped LoRa frame with non-matching IFAC (network name, passphrase or IFAC size differ)", RNS.LOG_WARNING)
             # Pass to Reticulum Transport for processing
             RNS.Transport.inbound(data, self)
             RNS.log(f"RNode received {len(data)} bytes", RNS.LOG_DEBUG)
@@ -1054,23 +1175,19 @@ class RNodeInterface:
             RNS.log(f"❌ Failed to reconnect to {self.target_device_name} after {attempt} attempts", RNS.LOG_ERROR)
             self._reconnecting = False
 
-    def process_held_announces(self):
-        """Process any held announces. Required by RNS Transport."""
-        # Process and clear held announces
-        for announce in self.held_announces:
-            try:
-                RNS.Transport.inbound(announce, self)
-            except Exception as e:
-                RNS.log(f"Error processing held announce: {e}", RNS.LOG_ERROR)
-        self.held_announces = []
+    def _update_bitrate(self):
+        """On-air bitrate for the configured LoRa parameters (reference RNS formula).
 
-    def sent_announce(self, from_spawned=False):
-        """Called when an announce is sent on this interface. Tracks announce frequency."""
-        self.oa_freq_deque.append(time.time())
-
-    def received_announce(self):
-        """Called when an announce is received on this interface. Tracks announce frequency."""
-        self.ia_freq_deque.append(time.time())
+        Transport derives the announce airtime cap from this, so an
+        overestimate floods the channel and an underestimate starves it.
+        """
+        try:
+            sf = int(self.sf)
+            cr = int(self.cr)
+            bw = int(self.bandwidth)
+            self.bitrate = sf * ((4.0 / cr) / (math.pow(2, sf) / (bw / 1000))) * 1000
+        except Exception:
+            self.bitrate = 1200
 
     def should_ingress_limit(self):
         """Check if ingress limiting should be applied. Required by RNS Transport."""
@@ -1093,8 +1210,10 @@ class RNodeInterface:
             self._write(kiss_frame)
             # Update transmit counter
             self.txb += len(data)
+            self.tx_frames += 1
             RNS.log(f"RNode sent {len(data)} bytes", RNS.LOG_DEBUG)
         except Exception as e:
+            self.tx_errors += 1
             RNS.log(f"Failed to send data: {e}", RNS.LOG_ERROR)
 
     def get_rssi(self):

@@ -83,7 +83,15 @@ fun RegionSelectionStep(viewModel: RNodeWizardViewModel) {
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // Frequency Region Cards
+            item {
+                CustomSettingsCard(
+                    title = "Custom Settings",
+                    description = "Configure all parameters manually",
+                    isSelected = state.isCustomMode,
+                    onClick = { viewModel.enableCustomMode() },
+                )
+            }
+
             items(
                 items = viewModel.getFrequencyRegions(),
                 key = { it.id },
@@ -92,16 +100,6 @@ fun RegionSelectionStep(viewModel: RNodeWizardViewModel) {
                     region = region,
                     isSelected = state.selectedFrequencyRegion?.id == region.id,
                     onClick = { viewModel.selectFrequencyRegion(region) },
-                )
-            }
-
-            // Custom option
-            item {
-                CustomSettingsCard(
-                    title = "Custom Settings",
-                    description = "Configure all parameters manually",
-                    isSelected = state.isCustomMode,
-                    onClick = { viewModel.enableCustomMode() },
                 )
             }
 

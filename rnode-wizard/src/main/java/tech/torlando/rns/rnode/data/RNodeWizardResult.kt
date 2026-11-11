@@ -20,4 +20,11 @@ data class RNodeWizardResult(
     val interfaceMode: String,
     val stAlock: String,
     val ltAlock: String,
+    // IFAC (Interface Authentication Code) settings — empty passphrase means no IFAC
+    val networkName: String,
+    val passphrase: String,
+    /** IFAC size in bits (RNS minimum is 8, must be a multiple of 8); 0 = leave to RNS default */
+    val ifacSize: Int,
+    /** Radio parameters were entered manually ("Custom") rather than from a region/preset. */
+    val customRadio: Boolean = false,
 )

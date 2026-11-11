@@ -85,7 +85,7 @@ def set_usb_bridge(bridge):
     usb_bridge.set_usb_bridge(bridge)
 
 
-def create_rnode_interface(name, connection_mode, target_device, frequency, bandwidth, spreading_factor, coding_rate, tx_power, enable_framebuffer=True):
+def create_rnode_interface(name, connection_mode, target_device, frequency, bandwidth, spreading_factor, coding_rate, tx_power, enable_framebuffer=True, network_name=None, passphrase=None, ifac_size=0, st_alock=None, lt_alock=None):
     """Create an RNode interface and register it with RNS Transport."""
     import rnode_interface as rni
 
@@ -106,6 +106,13 @@ def create_rnode_interface(name, connection_mode, target_device, frequency, band
         "coding_rate": int(coding_rate),
         "tx_power": int(tx_power),
         "enable_framebuffer": bool(enable_framebuffer),
+        # IFAC settings — IFAC activates when a network name/passphrase is set;
+        # ifac_size is in bits (0 = use the interface's default size).
+        "network_name": network_name,
+        "passphrase": passphrase,
+        "ifac_size": ifac_size,
+        "st_alock": float(st_alock) if st_alock else None,
+        "lt_alock": float(lt_alock) if lt_alock else None,
     }
 
     iface = rni.RNodeInterface(owner, name, config)
