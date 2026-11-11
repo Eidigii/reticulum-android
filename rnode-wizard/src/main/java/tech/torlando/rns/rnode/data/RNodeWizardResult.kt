@@ -27,4 +27,6 @@ data class RNodeWizardResult(
     val ifacSize: Int,
     /** Radio parameters were entered manually ("Custom") rather than from a region/preset. */
     val customRadio: Boolean = false,
+    /** Draw a custom image on the radio's own screen. Off keeps the RNode display. */
+    val enableFramebuffer: Boolean = false,
 )

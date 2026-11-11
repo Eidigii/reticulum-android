@@ -385,6 +385,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 put("networkName", rc.networkName)
                 put("passphrase", rc.passphrase)
                 put("ifacSize", rc.ifacSize)
+                put("stAlock", rc.stAlock)
+                put("ltAlock", rc.ltAlock)
+                put("enableFramebuffer", rc.enableFramebuffer)
             })
         }
 
@@ -460,6 +463,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     obj.put("st_alock", iface.stAlock)
                     obj.put("lt_alock", iface.ltAlock)
                     obj.put("custom_radio", iface.customRadio)
+                    obj.put("enable_framebuffer", iface.enableFramebuffer)
                 }
             }
             arr.put(obj)

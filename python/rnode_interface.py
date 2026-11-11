@@ -318,8 +318,9 @@ class RNodeInterface(Interface):
         self.tx_frames = 0
         self.tx_errors = 0
 
-        # External framebuffer (display) settings
-        self.enable_framebuffer = config.get("enable_framebuffer", True)
+        # External framebuffer (display) settings. Off by default so the
+        # radio keeps its own screen unless the user opts in.
+        self.enable_framebuffer = config.get("enable_framebuffer", False)
         self.framebuffer_enabled = False
 
         # Read thread
@@ -597,7 +598,7 @@ class RNodeInterface(Interface):
             self._set_online(True)
             RNS.log(f"RNode '{self.name}' is online", RNS.LOG_INFO)
 
-            # Display Columba logo on RNode if enabled
+            # Custom image on the RNode screen, or hand the screen back.
             self._display_logo()
         else:
             raise IOError("Radio configuration validation failed")

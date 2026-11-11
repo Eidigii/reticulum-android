@@ -267,6 +267,7 @@ private fun RNodeWizardResult.toInterfaceConfig() =
         stAlock = stAlock,
         ltAlock = ltAlock,
         customRadio = customRadio,
+        enableFramebuffer = enableFramebuffer,
     )
 
 private fun InterfaceConfig.RNodeInterface.toWizardResult() =
@@ -286,4 +287,5 @@ private fun InterfaceConfig.RNodeInterface.toWizardResult() =
         passphrase = passphrase,
         ifacSize = ifacSize,
         customRadio = customRadio,
+        enableFramebuffer = enableFramebuffer,
     )

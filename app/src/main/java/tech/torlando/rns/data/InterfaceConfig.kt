@@ -95,6 +95,8 @@ sealed class InterfaceConfig {
                             ltAlock = obj.optString("lt_alock", ""),
                             // Saved before the flag existed: edit with the exact saved values.
                             customRadio = obj.optBoolean("custom_radio", true),
+                            // Missing key means off: don't take over the radio's screen.
+                            enableFramebuffer = obj.optBoolean("enable_framebuffer", false),
                         )
                         else -> null
                     }
@@ -184,5 +186,7 @@ sealed class InterfaceConfig {
         val ltAlock: String = "",
         /** Radio parameters were entered manually ("Custom") rather than from a region/preset. */
         val customRadio: Boolean = false,
+        /** Draw a custom image on the radio's own screen. Off keeps the RNode display. */
+        val enableFramebuffer: Boolean = false,
     ) : InterfaceConfig()
 }

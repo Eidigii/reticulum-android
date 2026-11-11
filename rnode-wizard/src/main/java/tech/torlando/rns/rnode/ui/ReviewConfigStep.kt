@@ -49,6 +49,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -606,6 +607,41 @@ fun ReviewConfigStep(viewModel: RNodeWizardViewModel) {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         },
                 )
+
+                Spacer(Modifier.height(16.dp))
+
+                Card(
+                    colors =
+                        CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        ),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Custom display on radio",
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            Text(
+                                "Show the Reticulum logo on the RNode's own screen. Off leaves the radio's normal display.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(Modifier.width(16.dp))
+                        Switch(
+                            checked = state.enableFramebuffer,
+                            onCheckedChange = { viewModel.updateEnableFramebuffer(it) },
+                        )
+                    }
+                }
 
                 Spacer(Modifier.height(16.dp))
 

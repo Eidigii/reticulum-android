@@ -177,6 +177,8 @@ data class RNodeWizardState(
     val txPower: String = "17",
     val stAlock: String = "",
     val ltAlock: String = "",
+    /** Custom image on the radio's own screen. Off keeps the RNode display. */
+    val enableFramebuffer: Boolean = false,
     val interfaceMode: String = "boundary",
     // IFAC (Interface Authentication Code) — empty passphrase means IFAC is not used
     val ifacNetworkName: String = "",
@@ -361,6 +363,7 @@ class RNodeWizardViewModel(application: Application) : AndroidViewModel(applicat
                 txPower = existing.txPower.toString(),
                 stAlock = existing.stAlock,
                 ltAlock = existing.ltAlock,
+                enableFramebuffer = existing.enableFramebuffer,
                 interfaceMode = existing.interfaceMode,
                 ifacNetworkName = existing.networkName,
                 ifacPassphrase = existing.passphrase,
@@ -2722,6 +2725,10 @@ class RNodeWizardViewModel(application: Application) : AndroidViewModel(applicat
         updateRegulatoryWarning()
     }
 
+    fun updateEnableFramebuffer(enabled: Boolean) {
+        _state.update { it.copy(enableFramebuffer = enabled) }
+    }
+
     fun updateInterfaceMode(mode: String) {
         _state.update { it.copy(interfaceMode = mode) }
     }
@@ -2953,6 +2960,7 @@ class RNodeWizardViewModel(application: Application) : AndroidViewModel(applicat
                         passphrase = state.ifacPassphrase,
                         ifacSize = state.ifacSize.toIntOrNull() ?: 0,
                         customRadio = state.isCustomMode,
+                        enableFramebuffer = state.enableFramebuffer,
                     )
 
                 _state.update {

@@ -379,6 +379,9 @@ class TransportService : Service() {
                     networkName = o.optString("networkName", ""),
                     passphrase = o.optString("passphrase", ""),
                     ifacSize = o.optInt("ifacSize", 0),
+                    stAlock = o.optString("stAlock", ""),
+                    ltAlock = o.optString("ltAlock", ""),
+                    enableFramebuffer = o.optBoolean("enableFramebuffer", false),
                 )
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to parse RNode config", e)

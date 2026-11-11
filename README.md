@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="scripts/rns_logo.png" alt="Reticulum Network Stack" width="256">
-</p>
+![Reticulum Network Stack](scripts/rns_logo.png)
 
 # Reticulum for Android
 
@@ -19,6 +17,8 @@ Reticulum is a cryptography-based networking protocol for building resilient, de
 - Configure and manage interfaces: TCP client/server, UDP, AutoInterface, I2P, RNode (LoRa)
 - Interface Access Codes (network name / passphrase / IFAC size) on all interfaces
 - RNode setup wizard with frequency/bandwidth/SF/CR configuration, editing, and radio settings export/import
+- Optional custom image on the RNode's own screen (off by default)
+- Opens when a supported LoRa radio is plugged in over USB
 - TCP client wizard with optional SOCKS proxy support (for Tor)
 - LXMF messenger: identity, announces, nodes list, direct and propagated messages, propagation node sync and hosting
 - Network monitor: live announces, path table and rebroadcast queue
@@ -64,10 +64,11 @@ Messenger data (identity, settings, nodes, message database, LXMF storage) is st
 
 ### RNode / LoRa
 
-- **Fixed:** IFAC settings were passed to the Python RNode interface in the wrong argument order. The network name, passphrase and size were scrambled, so announces and messages were silently dropped between this app and other nodes using IFAC. They are now passed as keyword arguments.
 - `RNodeInterface` now subclasses the RNS `Interface` base class. This provides announce queueing, held announces, path request accounting and egress control, which RNS 1.4.x expects.
 - The on-air bitrate is computed from SF, bandwidth and CR, using the reference formula, so the announce airtime cap is correct.
-- Short-term and long-term airtime limits are now saved and applied to the radio.
+- Short-term and long-term airtime limits are saved with the interface and applied to the radio when it connects.
+- **Radio display:** the RNode keeps its own screen unless **Custom display on radio** is turned on in the RNode settings. That switch is off by default. Turning it on shows the Reticulum logo on the radio. With it off, the next connection restores the radio's normal display.
+- **USB attach:** plugging a supported LoRa radio in over USB opens the app, or brings it to the front if it is already running. The first time, Android asks which app should open for that device.
 - **LoRa diagnostics** on the interface stats screen:
   - The radio parameters reported back by the device.
   - Frames sent and received, plus the last RSSI and SNR.
@@ -88,18 +89,21 @@ Messenger data (identity, settings, nodes, message database, LXMF storage) is st
 - Fixed the path table and announce queue readers. The announce queue reported the wrong interface. Both now read Transport state from Python (`python/network_monitor.py`).
 
 ## Work in Progress
+
 Not all features of RNS are fully tested in Reticulum for Android. Notably, the following features need further testing before being relied upon:
+
 - Blackhole Management
 - Interface Discovery
 - Hosting a propagation node on the phone
 
 ## Missing Interfaces
+
 Generally speaking, any interface which uses pyjnius in Sideband requires a bridge to Kotlin code to work in chaquopy. On initial release, this app includes a bluetooth and usb bridge for RNode, but not a serial interface.
 
 ## Requirements
 
 - Android 8.0+ (API 26)
-- For RNode: a compatible LoRa device connected via USB or Bluetooth
+- For RNode: a compatible LoRa device connected via USB or Bluetooth. Connecting a supported radio over USB opens the app.
 
 ## Building
 
@@ -126,7 +130,7 @@ Release signing is read from environment variables, so no key material lives in 
 ./gradlew :app:assembleRelease
 ```
 
-Without these variables the release APK is built unsigned. Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds a signed APK from the same four values stored as GitHub Actions secrets and creates a draft release with the APK, its checksum and the signing certificate fingerprints.
+Without these variables the release APK is built unsigned. Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds a signed APK from the same four values stored as GitHub Actions secrets and creates a draft release with the APK, its checksum and the signing certificate fingerprints. Release notes are kept in [CHANGELOG.md](CHANGELOG.md).
 
 Keystores, `signing.properties` and other key files are excluded by `.gitignore`. Keep your keystore backed up: updates must be signed with the same key to install over an existing version.
 

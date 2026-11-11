@@ -114,6 +114,8 @@ class KotlinUSBBridge(
          * - 0x0525: ESP32/NRF52 CDC (Linux Foundation)
          * - 0x2E8A: Raspberry Pi Pico
          * - 0x303A: Espressif
+         * - 0x1915: Nordic nRF52840
+         * - 0x239A: Adafruit/Heltec
          */
         private val SUPPORTED_VIDS =
             setOf(
@@ -124,6 +126,7 @@ class KotlinUSBBridge(
                 0x0525,
                 0x2E8A,
                 0x303A,
+                0x1915, // Nordic nRF52840
                 0x239A, // Adafruit/Heltec
             )
 

@@ -44,13 +44,16 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:theme="@style/Theme.ReticulumTransport.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Plugging in a matching USB radio brings this activity to the foreground. -->
             <intent-filter>
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
             <meta-data
                 android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"

@@ -77,6 +77,7 @@ class ReticulumBinding(private val storagePath: String, private val context: Con
                         config.spreadingFactor,
                         config.codingRate,
                         config.txPower,
+                        Kwarg("enable_framebuffer", config.enableFramebuffer),
                         Kwarg("network_name", config.networkName),
                         Kwarg("passphrase", config.passphrase),
                         Kwarg("ifac_size", config.ifacSize),
