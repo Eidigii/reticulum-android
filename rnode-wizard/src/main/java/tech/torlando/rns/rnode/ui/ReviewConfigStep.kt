@@ -64,7 +64,7 @@ import androidx.compose.ui.unit.dp
 import tech.torlando.rns.rnode.data.FrequencySlotCalculator
 import tech.torlando.rns.rnode.viewmodel.RNodeWizardViewModel
 
-/** Export/import of the radio parameters only (file or clipboard). */
+/** Export/import of radio parameters and IFAC (file or clipboard). */
 @Composable
 private fun RadioSettingsTransferButtons(viewModel: RNodeWizardViewModel) {
     val context = LocalContext.current

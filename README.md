@@ -76,7 +76,7 @@ Messenger data (identity, settings, nodes, message database, LXMF storage) is st
 - **Editing an RNode**: the wizard opens with the saved device pre-selected. Interfaces set up with Custom settings go straight to those settings with the saved values. Saving updates the interface in place instead of adding a duplicate.
 - **Custom settings first**: "Custom Settings" is the first and default option when adding an RNode, with regions and presets below it.
 - **Radio settings export/import**:
-  - Covers frequency, bandwidth, SF, CR, TX power and airtime limits. No Bluetooth or device details, and no IFAC secrets.
+  - Covers frequency, bandwidth, SF, CR, TX power, airtime limits, and IFAC (network name, passphrase and size). No Bluetooth or device details. The file includes the IFAC passphrase.
   - Export to a JSON file or the clipboard.
   - Import from a file or the clipboard. Import also accepts `rnsd` config snippets such as `frequency = 867200000`.
 

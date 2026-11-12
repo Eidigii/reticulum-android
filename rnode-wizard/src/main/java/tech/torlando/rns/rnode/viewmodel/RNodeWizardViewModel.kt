@@ -222,9 +222,6 @@ class RNodeWizardViewModel(application: Application) : AndroidViewModel(applicat
         private const val RECONNECT_SCAN_TIMEOUT_MS = 15_000L
         private const val RSSI_UPDATE_INTERVAL_MS = 3000L
         private const val TCP_CONNECTION_TIMEOUT_MS = 5000
-        private const val RADIO_EXPORT_FORMAT = "rnode-radio-settings"
-        private val RADIO_KEYS =
-            listOf("frequency", "bandwidth", "spreading_factor", "coding_rate", "tx_power", "st_alock", "lt_alock")
     }
 
     private val context: Context get() = getApplication<Application>()
@@ -2762,30 +2759,31 @@ class RNodeWizardViewModel(application: Application) : AndroidViewModel(applicat
 
     // ========== RADIO SETTINGS EXPORT / IMPORT ==========
 
-    /** Radio parameters only: no device, interface name or IFAC secrets. */
+    /** Radio parameters and IFAC. No device identity or interface name. */
     fun exportRadioSettingsJson(): String {
         val s = _state.value
-        val obj =
-            org.json.JSONObject()
-                .put("format", RADIO_EXPORT_FORMAT)
-                .put("version", 1)
-                .put("frequency", s.frequency.toLongOrNull() ?: 0L)
-                .put("bandwidth", s.bandwidth.toLongOrNull() ?: 0L)
-                .put("spreading_factor", s.spreadingFactor.toIntOrNull() ?: 0)
-                .put("coding_rate", s.codingRate.toIntOrNull() ?: 0)
-                .put("tx_power", s.txPower.toIntOrNull() ?: 0)
-        s.stAlock.toDoubleOrNull()?.let { obj.put("st_alock", it) }
-        s.ltAlock.toDoubleOrNull()?.let { obj.put("lt_alock", it) }
-        return obj.toString(2)
+        return RadioSettingsTransfer.toJson(
+            frequency = s.frequency,
+            bandwidth = s.bandwidth,
+            spreadingFactor = s.spreadingFactor,
+            codingRate = s.codingRate,
+            txPower = s.txPower,
+            stAlock = s.stAlock,
+            ltAlock = s.ltAlock,
+            networkName = s.ifacNetworkName,
+            passphrase = s.ifacPassphrase,
+            ifacSize = s.ifacSize,
+        )
     }
 
     /**
-     * Apply radio parameters from an export file, or from an rnsd-style config
-     * snippet (`frequency = 867200000`, `spreadingfactor = 8`, ...).
+     * Apply radio parameters and IFAC from an export file, or from an rnsd-style
+     * config snippet (`frequency = 867200000`, `network_name = mynet`, ...).
+     * A field the source does not mention is left as it is.
      * Returns null on success, or an error message.
      */
     fun importRadioSettings(text: String): String? {
-        val values = parseRadioSettings(text.trim()) ?: return "Not a radio settings file"
+        val values = RadioSettingsTransfer.parse(text.trim()) ?: return "Not a radio settings file"
         if (values.isEmpty()) return "No radio settings found"
 
         // Imported values are manual settings; keep them when a region is re-applied.
@@ -2797,50 +2795,12 @@ class RNodeWizardViewModel(application: Application) : AndroidViewModel(applicat
         values["tx_power"]?.let { updateTxPower(it) }
         values["st_alock"]?.let { updateStAlock(it) }
         values["lt_alock"]?.let { updateLtAlock(it) }
+        values["network_name"]?.let { updateIfacNetworkName(it) }
+        values["passphrase"]?.let { updateIfacPassphrase(it) }
+        values["ifac_size"]?.let { updateIfacSize(it) }
         updateRegulatoryWarning()
         return null
     }
-
-    private fun parseRadioSettings(text: String): Map<String, String>? {
-        if (text.startsWith("{")) {
-            val obj = runCatching { org.json.JSONObject(text) }.getOrNull() ?: return null
-            if (obj.has("format") && obj.optString("format") != RADIO_EXPORT_FORMAT) return null
-            return RADIO_KEYS.mapNotNull { key ->
-                if (obj.has(key) && !obj.isNull(key)) key to formatNumber(obj.get(key)) else null
-            }.toMap()
-        }
-        val aliases =
-            mapOf(
-                "frequency" to "frequency",
-                "bandwidth" to "bandwidth",
-                "spreadingfactor" to "spreading_factor",
-                "spreading_factor" to "spreading_factor",
-                "codingrate" to "coding_rate",
-                "coding_rate" to "coding_rate",
-                "txpower" to "tx_power",
-                "tx_power" to "tx_power",
-                "airtime_limit_short" to "st_alock",
-                "airtime_limit_long" to "lt_alock",
-                "st_alock" to "st_alock",
-                "lt_alock" to "lt_alock",
-            )
-        return text.lineSequence()
-            .map { it.substringBefore('#').trim() }
-            .mapNotNull { line ->
-                val idx = line.indexOf('=')
-                if (idx <= 0) return@mapNotNull null
-                val key = aliases[line.substring(0, idx).trim().lowercase()] ?: return@mapNotNull null
-                val value = line.substring(idx + 1).trim()
-                if (value.isEmpty()) null else key to value
-            }
-            .toMap()
-    }
-
-    private fun formatNumber(value: Any): String =
-        when (value) {
-            is Double -> if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
-            else -> value.toString()
-        }
 
     fun toggleAdvancedSettings() {
         _state.update { it.copy(showAdvancedSettings = !it.showAdvancedSettings) }

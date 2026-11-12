@@ -51,4 +51,14 @@ dependencies {
 
     // Test
     testImplementation("junit:junit:4.13.2")
+    // Android's unit-test android.jar stubs org.json. Use the real library and
+    // drop that jar so JSONObject.put/has actually run.
+    testImplementation("org.json:json:20240303")
+}
+
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    classpath =
+        classpath.filter { file ->
+            !file.name.equals("android.jar", ignoreCase = true)
+        }
 }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2
+
+- LoRa radio settings export and import include the IFAC network name, passphrase and size. A file or `rnsd` snippet that omits them leaves the current IFAC unchanged.
+
 ## 0.2.1
 
 - The RNode keeps its own screen unless **Custom display on radio** is turned on in the RNode settings. The switch is off by default. Turning it on shows the Reticulum logo on the radio. With it off, the next connection restores the radio's normal display.
