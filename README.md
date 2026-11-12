@@ -130,7 +130,7 @@ Release signing is read from environment variables, so no key material lives in 
 ./gradlew :app:assembleRelease
 ```
 
-Without these variables the release APK is built unsigned. A push to `main` runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) once: unit tests, then a signed APK from the same four values stored as GitHub Actions secrets. The draft release is tagged `v` plus `versionName` from `app/build.gradle.kts`, and it includes the APK, its checksum and the signing certificate fingerprints. Release notes are kept in [CHANGELOG.md](CHANGELOG.md).
+Without these variables the release APK is built unsigned. A push to `main` runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) once: unit tests, then a signed APK from the same four values stored as GitHub Actions secrets. The release is tagged `v` plus `versionName` from `app/build.gradle.kts`, and it includes the APK, its checksum and the signing certificate fingerprints. Release notes are kept in [CHANGELOG.md](CHANGELOG.md).
 
 Keystores, `signing.properties` and other key files are excluded by `.gitignore`. Keep your keystore backed up: updates must be signed with the same key to install over an existing version.
 
